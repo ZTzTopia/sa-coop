@@ -697,7 +697,7 @@ void __cdecl HookHudDraw() {
         return;
     }
     g_origHudDraw();
-    if (Net().Online() && !Cfg().cleanScreen) Players::Instance().DrawWeaponIcons();
+    if (Net().Online() && !Cfg().cleanScreen && !game::MenuActive()) Players::Instance().DrawWeaponIcons();
 }
 
 // a colour for CHANGE_BLIP_COLOUR: the game's own (CRadar::GetRadarTraceColour: 0 red, 1 green, 2 blue, 3 white, 4

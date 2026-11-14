@@ -133,7 +133,7 @@ void RenderOverlay() {
     bool clean = Cfg().cleanScreen;
     g.SetHidden(clean || g_interfaceHidden);
     ui::In().UpdateMouse(g.Width(), g.Height());
-    if (IsPlayerReady())
+    if (IsPlayerReady() && !game::MenuActive())  // the pause menu hides our name tags, voice names and the like too
         for (auto* m : Modules()) m->OnRender();
     g.SetHidden(clean || (g_interfaceHidden && !ui::TheChat().IsOpen()));  // typed into after T: seen
     ui::TheChat().Render();

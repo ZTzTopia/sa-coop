@@ -2,7 +2,6 @@
 
 #include <algorithm>
 
-#include "common/config/version/Version.h"
 #include "common/lib/util/Util.h"
 #include "entities/player/Players.h"
 #include "entities/session/Flow.h"
@@ -20,24 +19,19 @@
 namespace coop::ui {
 
 void RenderOverlay() {
+    if (!core::IsInGame() || game::MenuActive()) return;  // the menus and the loading screens keep to the game
+
     auto& g = Gfx();
     float s = g.Scale();
     auto& net = Net();
-    bool frontend = game::GameState() != game::GAME_STATE_IDLE;
 
-    // bottom-right, in the game's menus: the way to the co-op window. Online it said "SA:COOP · host · 42 ms" all game long;
-    // the players know the mod, and the F2 list shows each one's ping and who hosts (the user's word, 16.11).
-    if (!net.Online() && frontend)
-        g.Text(FONT_SMALL, g.Width() - 16 * s, g.Height() - g.LineHeight(FONT_SMALL) - 10 * s,
-               TR("SA:COOP " COOP_VERSION_STR " · F9: совместная игра", "SA:COOP " COOP_VERSION_STR " · F9: co-op"), 0xC0FFFFFF,
-               TEXT_RIGHT | TEXT_OUTLINE);
 
     // A contest of two players on top of the screen: the activity, both players' points or times (the one ahead in
     // green), our time left to start our own game and how, and at its end the result in big letters a while. A single
     // small line of it was easy to miss, and the time to start and how were in the chat only.
     float boardBottom = 0.0f;
     contest::BoardView b;
-    if (!frontend && !core::ConnectMenuVisible() && contest::Board(b)) {
+    if (!core::ConnectMenuVisible() && contest::Board(b)) {
         const char* verdict = b.verdict == 1    ? TR("ПОБЕДА", "YOU WIN")
                               : b.verdict == -1 ? TR("ПОРАЖЕНИЕ", "YOU LOSE")
                               : b.verdict == 2  ? TR("НИЧЬЯ", "A DRAW")
@@ -101,7 +95,7 @@ void RenderOverlay() {
     std::string st, hint;
     if (phase == flow::Phase::WaitingWorld || phase == flow::Phase::StartingServer || phase == flow::Phase::Connecting)
         st = flow::StatusText();
-    else if (!frontend && (st = CutsceneSkipText(hint)).empty() && (st = contest::Text(hint)).empty() &&
+    else if ((st = CutsceneSkipText(hint)).empty() && (st = contest::Text(hint)).empty() &&
              (st = teleport::Text(hint)).empty() && (st = anims::Text(hint)).empty() && (st = SideCallText(hint)).empty())
         st = MissionWaitText(hint);
     if (!core::ConnectMenuVisible() && !st.empty()) {
