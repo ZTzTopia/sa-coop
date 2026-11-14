@@ -480,7 +480,7 @@ void Join(const std::string& hostArg, uint16_t port, const std::string& password
 }
 
 void Leave() {
-    SaveProfileNow();  // saved every 30 s otherwise: up to that much of the partner's progress was lost on leaving
+    SaveProfileNow();  // the last seconds before leaving go with the session profile the server keeps for a rejoin
     Net().Disconnect();
     StopServerProcess();
     g_isHosting = g_follower = g_prologueWait = g_worldNone = g_progressUpload = g_hasSpot = false;

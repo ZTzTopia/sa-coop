@@ -30,7 +30,8 @@ enum MsgId : uint8_t {
     // ---- client -> server ----
     C_HELLO = 1,
     C_CHAT = 2,              // str text (may be a /command)
-    C_PROFILE_SAVE = 3,      // bytes profile (opaque for the server), u32 game (from the S_PROFILE it started from)
+    C_PROFILE_SAVE = 3,      // bytes profile (opaque for the server), u32 game (from the S_PROFILE it started from),
+                             // u8 1: a checkpoint (the host saved or the player saved in its menu), 0: the session state
     C_WORLD_BEGIN = 4,       // host uploads its save: u32 size, u32 crc, str label
     C_WORLD_CHUNK = 5,       // u32 offset, bytes
     C_WORLD_END = 6,

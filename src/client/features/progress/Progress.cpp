@@ -908,7 +908,7 @@ public:
         });
         Net().SetHandler(proto::G_HOST_SAVED, [](uint8_t from, Reader&) {
             if (from != Net().HostId() || Net().IsHost() || !Instance().m_applied || !core::IsPlayerReady()) return;
-            Instance().SaveNow(true);
+            Instance().SaveNow(true, true);
             Instance().KeepWeaponsOfSave();
             ui::TheChat().AddSystem(TR("Хост сохранил игру. Ваши деньги, навыки и внешность тоже сохранены.",
                                        "The host saved the game. Your money, skills and look are saved too."));
@@ -1144,7 +1144,7 @@ public:
                                    "The host loaded a game. Your weapons are back as they were at that save."));
     }
 
-    void SaveNow(bool always = false) {
+    void SaveNow(bool always = false, bool checkpoint = false) {
         if (!Net().Online() || Net().IsHost() || !m_applied || !core::IsPlayerReady() || !flow::InHostWorld()) return;
         m_lastSaveMs = NowMs();
         std::vector<uint8_t> blob = CaptureProfile();
@@ -1152,6 +1152,7 @@ public:
         Writer w(proto::C_PROFILE_SAVE);
         w.Bytes(blob.data(), blob.size());
         w.U32(m_profileGame);
+        w.U8(checkpoint ? 1 : 0);  // a checkpoint the server keeps; otherwise the session state it may drop
         Net().Send(proto::CH_RELIABLE, w);
         m_saved = std::move(blob);
         m_profile = m_saved;  // a reload of the world re-applies the latest state
@@ -1177,7 +1178,7 @@ private:
 
 void PartnerSaved() {
     if (!flow::InHostWorld()) return;
-    Progress::Instance().SaveNow(true);
+    Progress::Instance().SaveNow(true, true);
     ui::TheChat().AddSystem(TR("Ваши деньги, навыки и внешность сохранены и у хоста.",
                                "Your money, skills and look are saved on the host's side too."));
 }

@@ -22,6 +22,8 @@ struct Config {
     bool partnerTeleport = true;  // the partners may use /tp and /tphere
     bool sharedLife = false;      // a partner's death fails the host's story mission
     bool partnerCheats = true;    // the partners' cheat codes work
+    bool checkpointSaves = true;  // only a save in the menu (the host's or the player's) writes a profile to the disk
+    int rejoinGraceMinutes = 10;  // how long a disconnected player's unsaved state waits for them (0 = until the restart)
     uint16_t port = 7788;
     int maxPlayers = 2;
     std::wstring dataDir;    // profiles/, world/
@@ -80,7 +82,7 @@ private:
     void FollowersJoin();
     void TellToWait(Player& p);
     void SendProfile(Player& p);
-    void SaveProfile(Player& p, const std::vector<uint8_t>& data);
+    void SaveProfile(Player& p, const std::vector<uint8_t>& data, bool checkpoint);
     void WriteProfiles();      // the profile writer's thread
     void WaitProfileWrites();  // returns once what is queued is on the disk
     void SwitchGame(uint32_t game);  // the host plays another game: its partners' profiles
@@ -121,6 +123,14 @@ private:
     uint64_t m_worldWantedTime = 0;        // when the host was asked for a fresh snapshot (0 = not asked)
     bool m_prologue = false;               // the host plays a new game's prologue: partners wait for its end
     uint32_t m_gameId = 0;                 // the host's game (C_GAME_ID): whose profiles the partners get
+    // The session state of each profile: not yet a checkpoint, so it dies unless the host or the player saves. Any
+    // disconnect keeps it for the rejoin grace, so a crash, a quit and a rejoin lose nothing. The network thread only.
+    struct PendingProfile {
+        std::vector<uint8_t> data;
+        uint64_t offlineSince = 0;  // 0 while its player is connected
+    };
+    std::map<std::wstring, PendingProfile> m_pendingProfiles;
+    uint64_t m_profileGraceMs = 0;  // Config::rejoinGraceMinutes in milliseconds (0 = keep until the restart)
 
     std::mutex m_cmdMutex;
     std::vector<std::string> m_cmdQueue;

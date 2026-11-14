@@ -20,6 +20,7 @@ static constexpr uint32_t kColorError = 0xFF6464FF;
 
 bool Server::Start(const Config& cfg) {
     m_cfg = cfg;
+    m_profileGraceMs = (uint64_t)m_cfg.rejoinGraceMinutes * 60 * 1000;
     if (m_cfg.maxPlayers < 1) m_cfg.maxPlayers = 1;
     if (m_cfg.maxPlayers > kMaxPlayers) {
         LOGW("В max_players указано %d, но игра поддерживает только %d игроков. Мест будет %d.", m_cfg.maxPlayers, kMaxPlayers,
@@ -99,6 +100,14 @@ void Server::Run() {
             for (auto& p : m_players)
                 if (p.used && !p.joined && NowMs() - p.connectTime > 10000)
                     Kick(p, "клиент не прислал приветствие", "the client sent no greeting");
+            // a session profile of a lost connection that never came back is no checkpoint (0 = keep until the restart)
+            if (m_profileGraceMs) {
+                for (auto it = m_pendingProfiles.begin(); it != m_pendingProfiles.end();)
+                    if (it->second.offlineSince && NowMs() - it->second.offlineSince > m_profileGraceMs)
+                        it = m_pendingProfiles.erase(it);
+                    else
+                        ++it;
+            }
         }
     }
     for (auto& p : m_players)
@@ -185,6 +194,11 @@ void Server::Leave(Player& p, LeaveReason why, const std::string& reason) {
     p.id = id;
     m_worldWaiters.erase(std::remove(m_worldWaiters.begin(), m_worldWaiters.end(), id), m_worldWaiters.end());
     if (!wasJoined) return;
+    // Every disconnect keeps the session profile for kProfileGraceMs: a crash, a quit and a rejoin lose nothing. It dies
+    // with the timeout or with the server, so a cheat session nobody checkpointed still leaves nothing behind.
+    std::wstring profile = ProfilePath(name);
+    auto pending = m_pendingProfiles.find(profile);
+    if (pending != m_pendingProfiles.end()) pending->second.offlineSince = NowMs();
     Writer w(S_PLAYER_LEAVE);
     w.U8(id);
     w.U8(why);
@@ -227,8 +241,9 @@ void Server::OnPacket(ENetPeer* peer, uint8_t channel, const uint8_t* data, size
         case C_PROFILE_SAVE: {
             auto blob = r.Bytes(64 * 1024);
             uint32_t game = r.U32();
+            bool checkpoint = r.U8() != 0;
             // sent before the host's switch reached that partner: it belongs to the other game
-            if (r.Ok() && game == m_gameId) SaveProfile(*p, blob);
+            if (r.Ok() && game == m_gameId) SaveProfile(*p, blob, checkpoint);
             else if (r.Ok()) LOGI("Профиль %s от другой игры хоста не записан", p->name.c_str());
             break;
         }
@@ -548,6 +563,7 @@ void Server::HostStartedNewGame() {
 void Server::SwitchGame(uint32_t game) {
     if (game == m_gameId) return;
     WaitProfileWrites();  // the other game's profile queued now would be read back half written
+    m_pendingProfiles.clear();  // the session state of the game being left is no checkpoint of the new one
     m_gameId = game;
     LOGI("Хост играет игру %08X: профили напарников из её папки", game);
     for (auto& o : m_players)
@@ -662,8 +678,20 @@ std::wstring Server::ProfilePath(const std::string& name) const {
 }
 
 void Server::SendProfile(Player& p) {
+    std::wstring path = ProfilePath(p.name);
     std::vector<uint8_t> data;
-    ReadFileBytes(ProfilePath(p.name), data);
+    bool have = false;
+    auto it = m_pendingProfiles.find(path);
+    if (it != m_pendingProfiles.end()) {
+        if (m_profileGraceMs && it->second.offlineSince && NowMs() - it->second.offlineSince > m_profileGraceMs) {
+            m_pendingProfiles.erase(it);  // away for too long: back to the last checkpoint
+        } else {
+            data = it->second.data;
+            have = true;
+            it->second.offlineSince = 0;
+        }
+    }
+    if (!have) ReadFileBytes(path, data);
     Writer w(S_PROFILE);
     w.Bytes(data.data(), data.size());
     w.U32(m_gameId);
@@ -679,11 +707,21 @@ void Server::SendInvite(Player* to) {
     else Broadcast(CH_RELIABLE, w);
 }
 
-// A profile goes to the disk on a thread of its own: flushed for a power cut, its write waited for the disk on the
-// network thread and stalled the relay of every state each time a partner sent its profile (~30 s: freezes, #43)
-void Server::SaveProfile(Player& p, const std::vector<uint8_t>& data) {
+// The session state of a profile lives in memory only: only a checkpoint (the host saved or the player saved in its menu)
+// goes to the disk, so a cheat session nobody saves leaves nothing behind — as in the single player game.
+void Server::SaveProfile(Player& p, const std::vector<uint8_t>& data, bool checkpoint) {
+    std::wstring path = ProfilePath(p.name);
+    if (!checkpoint && m_cfg.checkpointSaves) {
+        PendingProfile& pending = m_pendingProfiles[path];
+        pending.data = data;
+        pending.offlineSince = 0;
+        return;
+    }
+    m_pendingProfiles.erase(path);
+    // A profile goes to the disk on a thread of its own: flushed for a power cut, its write waited for the disk on the
+    // network thread and stalled the relay of every state each time a partner sent its profile (~30 s: freezes, #43)
     std::lock_guard<std::mutex> lock(m_writeMutex);
-    m_profileWrites[ProfilePath(p.name)] = data;
+    m_profileWrites[path] = data;
     if (m_writing) return;
     m_writing = true;
     std::thread([this] { WriteProfiles(); }).detach();
