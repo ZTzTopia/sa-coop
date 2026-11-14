@@ -121,6 +121,7 @@ void OnFootState::Write(Writer& w) const {
     w.Angle(aimRotation);
     w.U8(health);
     w.U8(armour);
+    w.U8(breath);
     w.U8(weapon);
     w.U16(ammo);
     w.U8(flags);
@@ -140,6 +141,7 @@ bool OnFootState::Read(Reader& r) {
     aimRotation = game::WrapAngle(r.Angle());
     health = r.U8();
     armour = r.U8();
+    breath = r.U8();
     weapon = r.U8();
     ammo = r.U16();
     flags = r.U8();

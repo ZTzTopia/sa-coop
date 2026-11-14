@@ -923,6 +923,15 @@ uint8_t WantedLevel(CPlayerPed* me) {
     return wanted ? (uint8_t)std::clamp(Field<int32_t>(wanted, 0x2C), 0, 6) : 0;  // CWanted::m_nWantedLevel
 }
 
+// Air left in the lungs as 0..255 (255 full): CPlayerData::m_fBreath over the lung capacity the stats give, the way the
+// game's own HUD bar reads it. The game draws that bar for its own player only, so the name tag shows the others'.
+uint8_t BreathLevel(CPlayerPed* me) {
+    void* pd = me->PlayerData();
+    if (!pd) return 255;
+    float max = Call<0x559AF0, float>(8);  // CStats::GetFatAndMuscleModifier(STAT_MOD_AIR_IN_LUNG)
+    return max > 0.0f ? (uint8_t)std::clamp(Field<float>(pd, 0x44) / max * 255.0f, 0.0f, 255.0f) : 255;
+}
+
 void FillCommon(OnFootState& st, CPlayerPed* me) {
     st.health = ClampByte(me->Health());
     st.wanted = WantedLevel(me);
@@ -2502,6 +2511,7 @@ void Players::SendLocalState() {
     st.aimRotation = me->AimingRotation();
     st.health = ClampByte(me->Health());
     st.armour = ClampByte(me->Armour());
+    st.breath = BreathLevel(me);
     CWeapon& w = me->ActiveWeapon();
     st.weapon = (uint8_t)w.type;
     st.ammo = (uint16_t)std::clamp(w.ammoTotal, 0, 65535);
@@ -2781,6 +2791,12 @@ void Players::DrawNameTag(RemotePlayer& rp) {
         g.Rect(bx - 1, by - 1, bw + 2, bh + 2, ui::WithAlpha(0xFF000000, alpha));
         g.Rect(bx, by, bw, bh, ui::WithAlpha(0xFF3C3C3C, alpha));
         g.Rect(bx, by, bw * ar, bh, ui::WithAlpha(0xFFE6E6E6, alpha));
+    }
+    if (rp.state.breath < 255) {  // under water: the air left, under the health bar
+        float ry = sy + 3 * s;
+        g.Rect(bx - 1, ry - 1, bw + 2, bh + 2, ui::WithAlpha(0xFF000000, alpha));
+        g.Rect(bx, ry, bw, bh, ui::WithAlpha(0xFF0A2A44, alpha));
+        g.Rect(bx, ry, bw * rp.state.breath / 255.0f, bh, ui::WithAlpha(0xFF3FA9F5, alpha));
     }
 }
 

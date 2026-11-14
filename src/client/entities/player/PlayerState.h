@@ -66,6 +66,7 @@ struct OnFootState {
     game::CVector pos, vel;
     float rotation = 0, aimRotation = 0;
     uint8_t health = 100, armour = 0;
+    uint8_t breath = 255;  // air left in the lungs, 255 full: the name tag shows it under water
     uint8_t weapon = 0;
     uint16_t ammo = 0;
     uint8_t flags = 0;   // F_*

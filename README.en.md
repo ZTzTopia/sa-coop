@@ -212,7 +212,8 @@ arrow), and a house one player buys appears for everyone.
 Everyone picks the colour of their arrow in the F9 window or with `/blip`, the host too. The others see that player's
 nickname in the chat and over their head and their waypoint in it as well, with two players too, and the radar route to
 that waypoint in that colour. The player's own waypoint and route to it are in their colour too. Above the
-partner's head you see their health, armour, weapon and wanted stars, shown over their RC toy while they fly one.
+partner's head you see their health, armour, weapon and wanted stars, and, under water, the air left, shown over their
+RC toy while they fly one.
 Turf wars near the host are the host's, and all players' kills of rival gang members provoke them. A partner more
 than 100 m from the host can start a war of their own, and the host sees in the chat which district it is for and how
 it ended. Cheats for the weather, traffic, pedestrians and game speed work for everyone, while weapon, money and
