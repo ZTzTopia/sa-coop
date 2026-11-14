@@ -759,6 +759,37 @@ std::wstring SavedGunsPath() {
 uint32_t g_hostLoad = 0, g_hostLoadSent = 0;  // host: this load of its game, a new number each time
 uint64_t g_hostLoadSentMs = 0;
 
+// A player new to this game gets a new game's CJ: no money, no weapons, no skills. The story, the city and the side
+// activities stay the world's (ApplyProfile keeps the world's stats), the look is put on right after.
+std::vector<uint8_t> FreshProfile() {
+    Writer w;
+    w.U32(kProfileMagic);
+    w.U16(4);  // no side progress and no bought list: the world's stay, its own wardrobe comes from BringOwnBought
+    w.I32(0);  // money
+    // a new game's body (main.scm and CStats::Init), not a zeroed block: with the max-health stat at 0 every save, HESOYAM,
+    // hospital and meal set health to the max health the game took from it, and a body with no fat or muscle to burn made
+    // hunger take health instead
+    std::vector<uint8_t> stats(kStatsSize, 0);
+    auto setFloat = [&](int id, float v) { memcpy(&stats[kFloatStats + (size_t)id * 4], &v, sizeof v); };
+    auto setInt = [&](int id, int32_t v) { memcpy(&stats[(size_t)(id - 120) * 4], &v, sizeof v); };
+    setFloat(21, 200.0f);  // fat: 20% of a new game
+    setFloat(22, 100.0f);  // stamina: 10% (CStats::Init)
+    setFloat(23, 50.0f);   // muscle: 5% of a new game
+    setFloat(24, 569.0f);  // max health: 100 (CStats::Init)
+    setInt(165, 800);      // energy: a new game starts full
+    w.Bytes(stats.data(), stats.size());
+    w.Bytes(FindPlayerPed(0)->ClothesDesc(), kClothesSize);  // the world's clothes for now
+    w.U8(NUM_WEAPON_SLOTS);
+    for (int i = 0; i < NUM_WEAPON_SLOTS; ++i) w.U8(0), w.I32(0);  // no weapons
+    w.U8(0);    // the fighting style
+    w.U8(100);  // max health
+    w.U8(PlayerInfos()[0].maxArmour);  // not the profile's to set: a fresh CJ only gets full health
+    for (int i = 0; i < 5; ++i) w.U8(0);  // the rewards
+    w.U8(0);  // whose look (WearOwnLook puts its own on right after)
+    w.U8(0);  // the gym's moves
+    return w.Buffer();
+}
+
 bool ApplyProfile(const std::vector<uint8_t>& blob, bool& lookOwn, bool& boughtOwn) {
     Reader r(blob.data(), blob.size());
     if (r.U32() != kProfileMagic) return false;
@@ -990,6 +1021,11 @@ public:
             // The host's new game: a new CJ for the partner too, in the clothes and body the game starts with. The look of
             // its own single player game went on as on a first visit, and the old CJ came into the new game (31.10).
             bool fresh = m_profile.empty() && (m_reset || flow::IsFollower());
+            // a new game's CJ: full health; the armour is not the profile's to set
+            auto freshCj = [&] {
+                ApplyProfile(FreshProfile(), own, boughtOwn);
+                me->Health() = (float)PlayerInfos()[0].maxHealth;
+            };
             if (m_profile.empty()) {
                 // the gym's "enough for today" (5347 day, 5348 month, 5349 the day's workout: gymbench.scm's $21388..$21396)
                 // came with the host's world, and a partner here for the first time could not train once the host had (#132)
@@ -997,18 +1033,24 @@ public:
                     LOGI("First visit: the gym's workout of the host's world (%d.%d) is not ours, the machines are free",
                          Global(5347), Global(5348));
                 Global(5347) = Global(5348) = Global(5349) = 0;
-                ui::TheChat().AddSystem(fresh ? TR("Хост начал новую игру. Деньги, оружие, навыки и внешность у вас тоже начинаются заново.",
-                                                   "The host started a new game. Your money, weapons, skills and look start over too.")
-                                              : TR("Вы здесь впервые. Дальше деньги, навыки и внешность у вас будут свои.",
-                                                   "You are here for the first time. From now on your money, skills and look "
-                                                   "are your own."));
+                // A game already played: the partner is new to it, so it starts as a new game's CJ, not as the host
+                if (!fresh) freshCj();
+                ui::TheChat().AddSystem(
+                    fresh ? TR("Хост начал новую игру. Деньги, оружие, навыки и внешность у вас тоже начинаются заново.",
+                               "The host started a new game. Your money, weapons, skills and look start over too.")
+                          : TR("Вы здесь впервые. Деньги, оружие и навыки начинаются с нуля, внешность своя. Сюжет и "
+                               "город от хоста.",
+                               "You are here for the first time. Your money, weapons and skills start from zero. Your "
+                               "look is your own. The story and the city come from the host."));
                 m_reset = false;
             } else if (ApplyProfile(m_profile, own, boughtOwn)) {
                 LOGI("Profile applied (%zu bytes)", m_profile.size());
                 m_quietUntil = now + 5000;
                 ui::TheChat().AddSystem(TR("Загружены ваши деньги, навыки и внешность.", "Your money, skills and look are loaded."));
             } else {
-                LOGW("Profile rejected (bad format), starting from the world's state");
+                // a broken or older profile is no reason to be the host's CJ
+                LOGW("Profile rejected (bad format), starting as a new game's CJ");
+                freshCj();
             }
             g_lookOwn = own || (!fresh && WearOwnLook(m_profile.empty()));
             if (!g_lookOwn) memcpy(g_givenKeys, me->ClothesDesc(), sizeof g_givenKeys);
