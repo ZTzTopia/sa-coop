@@ -147,7 +147,7 @@ private:
     void TakeWheelForScript(game::CPlayerPed* me);
     void HandleTakeWheel(uint8_t from, Reader& r);
     void PutAwayStuckPhone(game::CPlayerPed* me);
-    void PassengerWeaponWheel(game::CPlayerPed* me);
+    void SeatWeaponWheel(game::CPlayerPed* me);
     void HandleOnFoot(uint8_t from, Reader& r);
     void HandleDriver(uint8_t from, Reader& r);
     void HandlePassenger(uint8_t from, Reader& r);

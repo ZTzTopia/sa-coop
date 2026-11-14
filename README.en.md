@@ -97,9 +97,9 @@ seats, and on helicopters and boats with no seat left, the G key takes you aboar
 its seats and stand up to shoot in the gun's view (the camera change key), on a plane the first one sits beside the
 pilot, and the enter key takes you off, out of a plane in the air with a parachute. A passenger can
 shoot from the window: the right mouse button leans out with the gun, the left one fires. A passenger fires the RPG and the heat-seeking
-launcher that way too, only without the lock-on. The driver also aims and fires anywhere while holding the right
-mouse button, on a motorbike as well. Everyone in a car hears one radio: the driver changes the station, and the
-passengers hear the same song from the same point. Tuning and damage are visible to the other players. Plane landing
+launcher that way too, only without the lock-on. The driver also aims and fires any gun, rockets included, while
+holding the right mouse button, on a motorbike as well; while aiming, the mouse wheel cycles their guns. Everyone in a
+car hears one radio: the driver changes the station, and the passengers hear the same song from the same point. Tuning and damage are visible to the other players. Plane landing
 gear and nozzles, tank and fire truck turrets, hydraulics, the horn, the police helicopter's searchlight, trailers,
 the tow truck and the airport tug all work. Explosions, rockets, grenades, tank shells, fire truck water, NPC
 drive-bys, trains and RC toys are seen by everyone. Any player can leave a car in the garage at a safe house or take

@@ -275,24 +275,26 @@ void PassengerShopCamera(CPlayerPed* me) {
     }
 }
 
-bool PassengerAiming() {
+bool SeatAiming() {  // our player leans out of a window (the right mouse button; R1 is the passenger's)
     CPlayerPed* me = FindPlayerPed(0);
-    return Net().Online() && me && me->InVehicle() && me->Vehicle() && me->Vehicle()->Driver() != me && AimFromSeat(GetPad(0));
+    if (!Net().Online() || !me || !me->InVehicle() || !me->Vehicle()) return false;
+    if (me->Vehicle()->Driver() == me) return GetPad(0)->NewState.m_bVehicleMouseLook;  // R1 is the handbrake
+    return AimFromSeat(GetPad(0));
 }
 // In a car the mouse wheel and a pad's d-pad up and down are the radio (VEHICLE_RADIO_STATION_UP/DOWN set DPadUp and
-// DPadDown). Leaning out of a passenger's window they go round the guns (PassengerWeaponWheel), and the radio
+// DPadDown). Leaning out of a window they go round the guns (SeatWeaponWheel), and the radio
 // (CAERadioTrackManager, its two calls) does not hear them meanwhile.
 using StationFn = bool(__fastcall*)(CPad*, void*);
 StationFn g_origNextStation = nullptr, g_origLastStation = nullptr;
-bool __fastcall HookNextStation(CPad* pad, void* edx) { return !PassengerAiming() && g_origNextStation(pad, edx); }
-bool __fastcall HookLastStation(CPad* pad, void* edx) { return !PassengerAiming() && g_origLastStation(pad, edx); }
+bool __fastcall HookNextStation(CPad* pad, void* edx) { return !SeatAiming() && g_origNextStation(pad, edx); }
+bool __fastcall HookLastStation(CPad* pad, void* edx) { return !SeatAiming() && g_origLastStation(pad, edx); }
 
-// A gun to lean out of a window with: any instant-hit one, and a passenger's rocket launcher (#94; the players' choice of
-// 01.11 gave rockets to passengers only).
+// A gun to lean out of a window with: any instant-hit one, and a rocket launcher for either seat (#94; #124 gave the
+// driver the rocket too).
 constexpr int WEAPON_RLAUNCHER = 35, WEAPON_RLAUNCHER_HS = 36;
-bool DriveByGun(int type, bool passenger) {
+bool DriveByGun(int type) {
     void* info = type ? Call<0x743C60, void*>(type, (uint8_t)1) : nullptr;  // CWeaponInfo::GetWeaponInfo
-    return info && (Field<int32_t>(info, 0) == 1 || (passenger && (type == WEAPON_RLAUNCHER || type == WEAPON_RLAUNCHER_HS)));  // FIRE_INSTANT_HIT
+    return info && (Field<int32_t>(info, 0) == 1 || type == WEAPON_RLAUNCHER || type == WEAPON_RLAUNCHER_HS);  // FIRE_INSTANT_HIT
 }
 bool Passenger(CPed* ped) { return ped->InVehicle() && ped->Vehicle() && ped->Vehicle()->Driver() != ped; }
 
@@ -301,7 +303,7 @@ bool __cdecl PassengerDriveBy() {
     CPlayerPed* ped = FindPlayerPed(-1);
     if (!Net().Online() || !ped || pad->DisablePlayerControls || !AimFromSeat(pad) || cam::Mode() == 0x37) return false;  // MODE_AIMWEAPON_FROMCAR
     const CWeapon& w = ped->ActiveWeapon();
-    if (!DriveByGun(w.type, true) || w.ammoTotal <= 0) return false;
+    if (!DriveByGun(w.type) || w.ammoTotal <= 0) return false;
     void* playerInfo = CallMethod<0x609FF0, void*>(ped);  // CPlayerPed::GetPlayerInfoForThisPlayerPed
     g_ourDriveBy.try_emplace(ped, playerInfo ? Field<uint8_t>(playerInfo, 0x153) : (uint8_t)1);
     return true;
@@ -310,8 +312,8 @@ bool __cdecl PassengerDriveBy() {
 // The driver's lean-out is the game's own for the cheat "weapon aiming while driving" (OUIQDMW): with the cheat on,
 // CTaskSimpleCarDrive::ProcessPed (0x6446B6) leans a player driving out with the SMG of its slot. In co-op it leans out
 // while the driver holds the right mouse button (its look in a car; R1 is a pad's handbrake there, so not on a pad) with
-// any instant-hit gun in hand, as a passenger does, and goes back in when it is let go (the players' choice of 01.11:
-// to shoot freely from a motorbike). The other player's copy has no such button in its pad state: it leans
+// any gun in hand, rockets included, and changes it with the wheel while aiming (#124), and goes back in when it is let
+// go (the players' choice of 01.11: to shoot freely from a motorbike). The other player's copy has no such button in its pad state: it leans
 // out while its owner's camera aims from the car (MODE_AIMWEAPON_FROMCAR, which the lean-out gives a player's camera).
 // The cheat itself as the game has it.
 bool DriverAiming(CPed* ped) {
@@ -327,7 +329,7 @@ bool DriverDriveBy(CPed* ped) {  // the driver processed: ours, or the other pla
     if (Ref<uint8_t>(0x969179)) return ped->Weapons()[4].type && ped->Weapons()[4].ammoTotal > 0;  // the cheat on: its SMG slot
     if (!Net().Online() || GetPad(0)->DisablePlayerControls || InDriveBy(ped) || !DriverAiming(ped)) return false;
     const CWeapon& w = ped->ActiveWeapon();
-    if (!DriveByGun(w.type, false) || w.ammoTotal <= 0) return false;
+    if (!DriveByGun(w.type) || w.ammoTotal <= 0) return false;
     void* playerInfo = CallMethod<0x609FF0, void*>(ped);  // CPlayerPed::GetPlayerInfoForThisPlayerPed
     // a mission that took drive-bys away (SET_PLAYER_CAN_DO_DRIVE_BY) takes ours too; the copy goes by its owner's camera
     if (ped == FindPlayerPed(0) && playerInfo && !Field<uint8_t>(playerInfo, 0x153)) return false;
@@ -357,11 +359,12 @@ bool UsesModelWalk(CPed* ped) {
     return own;
 }
 
-// The lean-out ends at once for a gun that is not instant-hit (0x62D3DF): a passenger's rocket launcher goes on
+// The lean-out ends at once for a gun that is not instant-hit (0x62D3DF): a rocket launcher goes on in either seat
+// (#94, #124)
 bool DriveByWeaponOk(void* info, CPed* ped) {
     if (!info || Field<int32_t>(info, 0) == 1) return true;  // the game's own test: none, or FIRE_INSTANT_HIT
     int type = ped->ActiveWeapon().type;
-    return (type == WEAPON_RLAUNCHER || type == WEAPON_RLAUNCHER_HS) && Passenger(ped) &&
+    return (type == WEAPON_RLAUNCHER || type == WEAPON_RLAUNCHER_HS) &&
            (ped == (CPed*)FindPlayerPed(0) || Players::Instance().FindByPed(ped));
 }
 
@@ -393,7 +396,7 @@ bool __fastcall HookGangDriveByProcess(void* task, void* edx, CPed* ped) {
     // with a rifle had none either: the task adds the models of the drive-by guns only.
     bool player = ped == (CPed*)FindPlayerPed(0) || Players::Instance().FindByPed(ped);
     // the gun's info the task keeps from its start: taken anew each step, as the gun in hand can change while leaning out
-    // (PassengerWeaponWheel, the other player's copy following its owner's)
+    // (SeatWeaponWheel, the other player's copy following its owner's)
     if (player) Field<void*>(task, 0x30) = nullptr;  // CTaskSimpleGangDriveBy::m_pWeaponInfo
     auto gunInHand = [ped] {
         if (Field<void*>(ped, 0x4F4)) return;  // CPed::m_pWeaponObject
@@ -897,7 +900,7 @@ void __fastcall HookRemoveWeaponEnter(CPed* ped, void* edx, int jetpack) {
     if (Net().Online() && !jetpack && ped == (CPed*)FindPlayerPed(0)) {
         int task = ActivePrimaryTaskType(ped);
         const CWeapon& w = ped->ActiveWeapon();
-        if ((task == TASK_ENTER_CAR_AS_PASSENGER || task == TASK_ENTER_CAR_AS_PASSENGER_TIMED) && DriveByGun(w.type, true) &&
+        if ((task == TASK_ENTER_CAR_AS_PASSENGER || task == TASK_ENTER_CAR_AS_PASSENGER_TIMED) && DriveByGun(w.type) &&
             w.ammoTotal > 0 && w.type != 28 && w.type != 29 && w.type != 32)  // not the Uzi, MP5, Tec-9
             playerInfo = CallMethod<0x609FF0, void*>(ped);  // CPlayerPed::GetPlayerInfoForThisPlayerPed
     }
@@ -2111,22 +2114,22 @@ void Players::GroupRides(CPlayerPed* me) {
     }
 }
 
-// A passenger changes its gun leaning out of the window (27.10): in a car the game lets nobody change weapons
-// (m_bInVehicleDontAllowWeaponChange), and a friend riding with a bat or the wrong rifle got out, changed and got in
-// again. The wheel up (or a pad's d-pad up) goes to the previous gun, as on foot, down to the next; round the guns that
-// shoot from a window (instant-hit) with rounds. The one chosen stays in hand after getting out.
-void Players::PassengerWeaponWheel(CPlayerPed* me) {
+// A player in any seat changes its gun leaning out of the window (27.10; the driver 14.11, #124): in a car the game
+// lets nobody change weapons (m_bInVehicleDontAllowWeaponChange), and a friend riding with a bat or the wrong rifle got
+// out, changed and got in again. The wheel up (or a pad's d-pad up) goes to the previous gun, as on foot, down to the
+// next; round the guns that shoot from a window with rounds. The one chosen stays in hand after getting out.
+void Players::SeatWeaponWheel(CPlayerPed* me) {
     CPad* pad = GetPad(0);
-    if (!PassengerAiming() || pad->DisablePlayerControls || pad->bDisablePlayerCycleWeapon) return;
+    if (!SeatAiming() || pad->DisablePlayerControls || pad->bDisablePlayerCycleWeapon) return;
     bool prev = pad->NewState.DPadUp && !pad->OldState.DPadUp, next = pad->NewState.DPadDown && !pad->OldState.DPadDown;
     if (prev == next) return;
     int cur = Field<int8_t>(me, 0x718);  // CPed::m_nActiveWeaponSlot
     for (int i = 1; i < 13; ++i) {
         const CWeapon& w = me->Weapons()[((cur + (next ? i : -i)) % 13 + 13) % 13];
-        if (!DriveByGun(w.type, true) || w.ammoTotal <= 0) continue;  // rounds left
+        if (!DriveByGun(w.type) || w.ammoTotal <= 0) continue;  // rounds left
         CallMethod<0x5E6280>(me, (int)w.type);  // CPed::SetCurrentWeapon: its model in hand, the old one away
         Field<int32_t>(me, 0x70C) = 55;         // CPed::m_nSavedWeapon: none, the chosen gun stays after getting out
-        LOGI("Passenger's gun: %d", (int)w.type);
+        LOGI("Seat gun: %d", (int)w.type);
         return;
     }
 }
@@ -2602,7 +2605,7 @@ void Players::OnPostProcess() {
     YieldClaimedSeat(me);
     TakeWheelForScript(me);
     PutAwayStuckPhone(me);
-    PassengerWeaponWheel(me);
+    SeatWeaponWheel(me);
     PassengerShopCamera(me);
     if (me->InVehicle() && me->Vehicle() && me->Vehicle()->Driver() == me) m_lastCar = GetVehicleRef(me->Vehicle());
     if (me->InVehicle() && me->Vehicle() && !me->Vehicle()->IsTrain()) SendVehicleState(me->Vehicle());
