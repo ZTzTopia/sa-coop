@@ -2,8 +2,8 @@
 // A side activity played as a contest of two players. Who starts one may challenge the other (U) in its first 20
 // seconds; who says yes (Y) plays the same in its own game, and when both are done each game tells who won. The
 // activities: basketball's points challenge, pool, the casino's blackjack, roulette and wheel of fortune (not the
-// machines), dancing in a club, the lowrider meet, the stadiums' Kickstart, Blood Ring, 8-Track and Dirt Track, the
-// races and the triathlons. Each player plays its own game as ever: the contest only reads the result.
+// machines), dancing in a club, the lowrider meet, the stadiums' Kickstart, Blood Ring and the triathlons. Each player
+// plays its own game as ever: the contest only reads the result. Races are raced together (Y), not contested.
 #include <cstdint>
 #include <string>
 

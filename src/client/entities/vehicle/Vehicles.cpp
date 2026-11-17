@@ -1126,6 +1126,20 @@ void Vehicles::ScanTraffic() {
     for (int i = 0; i < pool->size; ++i) {
         if (pool->byteMap[i] < 0) continue;
         auto* v = (CVehicle*)(pool->objects + (size_t)i * kVehiclePoolElemSize);
+        // A Blood Ring or triathlon contest runs the same activity in both games: each keeps its own AI vehicles, or
+        // both games' cars stand on one track. Cars announced before the contest bound are taken off the network now;
+        // the player's own car still goes (a local car with a player inside is synced).
+        if (ContestHidesVehicles() && !HasPlayerInside(v) && ScriptHolds(v)) {
+            if (auto it = m_byPtr.find(v); it != m_byPtr.end()) {
+                Writer w(proto::G_VEH_REMOVE);
+                w.U16(it->second);
+                w.U8(0);
+                Net().Send(proto::CH_RELIABLE, w);
+                Forget(it->second, false);
+            }
+            KeepLocal(v);
+            continue;
+        }
         // a local car goes out once a player drives it (a mod's garbage truck with its own driver stays local)
         if (m_byPtr.count(v) || !IsSyncableVehicle(v) || (m_local.count(GetVehicleRef(v)) && !HasPlayerInside(v))) continue;
         // A car generator's car far from its player: the game took it away out of the camera at once and made it again,

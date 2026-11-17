@@ -36,13 +36,23 @@ uint8_t SideLeader();
 // the players who take part in this game's joint side activity
 std::vector<uint8_t> SideHelpers();
 
+// host: our side activity's call is open (a partner may still join); a race holds its start while it is
+bool SideOffering();
+
+// the running race is a story mission's own (its launcher is the story's), not a side thread's or main.scm's
+bool StoryRace();
+
 // partner: on foot in a story mission's start point, no mission here or at the host's (the host's world after its
 // progress loads there, and the host's start waits for it)
 bool AtMissionMarker();
 
-// this player plays a side activity a contest can be of (basketball's challenge, a dance, a casino table, a race), a
-// contest of its is asked or on (features/story/contest), or a game of pool for two runs with it in it
+// this player plays a side activity a contest can be of (basketball's challenge, a dance, a casino table), a contest of
+// its is asked or on (features/story/contest), or a game of pool for two runs with it in it
 bool ContestActivity();
+
+// our own run of a contest that each game plays in its own world with the mission's vehicles (Blood Ring, a triathlon):
+// its AI vehicles stay this game's and are not announced to the other one
+bool ContestHidesVehicles();
 
 // host: its mission (or the mission's trigger) runs and a partner is there to see it
 bool HostReplicating();

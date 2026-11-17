@@ -45,10 +45,9 @@ constexpr uintptr_t kMissionLocals = 0xA48960;  // CTheScripts::LocalVariablesFo
 constexpr uint32_t kBasketPoints = 7696, kDancePoints = 21184, kLowPoints = 4072, kKickPoints = 33048;
 // the casino tables' scripts run near their tables (object brains): each says when its game is on
 constexpr uint32_t kBlackjackTable = 36868, kWheelTable = 37760, kRoulettePlays = 13956;
-// CPRACE: the race ($1408), its clock ($27840: when it started, the time itself against the clock), its stage 49@ (13
-// on: over the line), the racers 256@ (1: against the clock), the place 450@. TRIA: which one ($7248), its start 767@
-// (game ms), the place 942@. BLOOD: 91@ (1 won, 2 lost).
-constexpr uint32_t kRaceIndex = 1408, kRaceClock = 27840, kTriathlonIndex = 7248;
+// TRIA: which one ($7248), its start 767@ (game ms), the place 942@. BLOOD: 91@ (1 won, 2 lost). RACE is no longer
+// offered (races are played together), but its result code keeps the race clock ($27840).
+constexpr uint32_t kRaceClock = 27840, kTriathlonIndex = 7248;
 
 int32_t Global(uint32_t off) { return Ref<int32_t>(addr::ScriptSpace + off); }
 int32_t Local(int n) { return Ref<int32_t>(kMissionLocals + (uintptr_t)n * 4); }
@@ -185,7 +184,7 @@ uint8_t Playing(int32_t& variant) {
         if (Named(mission, "pool2")) return POOL;
         if (Named(mission, "kicksta")) return KICKSTART;
         if (Named(mission, "blood")) return BLOODRING;
-        if (Named(mission, "cprace")) return variant = Global(kRaceIndex), RACE;
+        // cprace is raced together (Y), not as a contest: two CPRACE runs in one world put both grids' cars on the track
         if (Named(mission, "tria")) return variant = Global(kTriathlonIndex), TRIATHLON;
     }
     bool meet = mission && Named(mission, "lowr");
@@ -679,4 +678,9 @@ void AfterCommand(void* script, uint16_t op, const uint8_t* ip) {
 
 namespace coop {
 bool ContestActivity() { return contest::g_run.kind != 0 || contest::g_c.phase != contest::Phase::OFF || pool::Playing(); }
+// Blood Ring and a triathlon are played as contests in each game's own world: their AI vehicles (the derby cars, the
+// triathlon's bikes) stay there, or both games' vehicles stand on one track
+bool ContestHidesVehicles() {
+    return (contest::g_run.kind == contest::BLOODRING || contest::g_run.kind == contest::TRIATHLON) && contest::g_run.bound;
+}
 }  // namespace coop

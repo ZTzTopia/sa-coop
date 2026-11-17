@@ -262,7 +262,10 @@ enum MsgId : uint8_t {
                               // 4 a second): u8 place, u8 racers, u8 the owner's place, u8 lap, u8 laps, vec3 its next
                               // checkpoint, vec3 the one after, u8 checkpoint type, f32 size; 2 done (reliable): u8 place,
                               // u8 racers, u8 finished (0: the race ended first); 3 watch (to 255, unreliable, twice a
-                              // second): u8 the racer's place, u8 racers, for one riding with it or near it
+                              // second): u8 the racer's place, u8 racers, for one riding with it or near it; 4 start
+                              // (reliable, owner -> rider): u8 area, u16 model, u8 colour1, u8 colour2, u16 health, vec3
+                              // grid place, f32 heading; 5 ready (rider -> owner, reliable); 6 go (reliable, owner ->
+                              // rider); 7 prize (reliable, owner -> rider): u32 what the race paid the winner
     G_MISSION_LOOK = 164,     // reliable, host -> partner: what the story mission put on its player, worn over the
                               // partner's own look: u8 n, n x (u8 key index 0..27 of CPedClothesDesc, u32 key); 0: off
     G_OBJ_HOLD = 163,         // reliable: the partner holds the copy of a host's mission object: u8 op (1 hold, 2 release,

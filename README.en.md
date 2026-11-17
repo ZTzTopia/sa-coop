@@ -176,13 +176,26 @@ in subtitles. These voices are in the archive's `coop/voices` folder, without it
 Side jobs (taxi, paramedic, firefighter, vigilante, pimp, courier), races, schools, the shooting range, trucking and
 the quarry are played by each player in their own game. A vehicle side job is started by whoever drives. A side job, a
 race, a stadium event, the quarry, a valet shift or a shooting range round can be played together: within 20 seconds
-of its start press Y, and the other players get an invitation (Y: yes, N: no). Whoever accepts sees its markers,
+of its start (15 for a race) press Y, and the other players get an invitation (Y: yes, N: no). Whoever accepts sees its markers,
 checkpoints, timers and hints, can ride along and help, for example put out burning cars or shoot the criminals, and
 gets the same money at its end. The job's levels stay with the player who started it, and the reward for completing
 the job goes to everyone. Taxi fares, stolen goods, trucking runs and quarry jobs count together for the reward.
 
-In a joint race, a story race too, the second player races as well, with their own checkpoints and their own place on
-the screen. Whoever rides with a racer sees the racer's place. Pool for two is played for money: the loser gives the
+In a joint race, the second player races as well, with their own checkpoints and their own place on the screen. A race
+started as a side activity begins from the grid: the second takes the place of one of its own racers. Its 15-second
+call holds the race at 3, so the second can take that place before the countdown runs; the countdown then waits until
+they are seated. The race's prize goes to the winner once: if the winner is the second, its game is paid through the
+mod; the side job's money sharing does not copy the prize. If the second crosses the line first, the owner's game also
+finishes the race: its racer is put first so the race shows its result, and the stadium prize that fake first place
+pays the owner is taken back, so only the rider's prize remains; a story race's mission cash is shared as any mission's.
+If the
+owner's game ends the race (the owner finished, failed or left), the riders still on the track keep its route and their
+places for up to three minutes and finish there. A new race cannot be started while this window is open: the new start is cancelled. Every Race Tournament race
+runs the same mission, so it is joint too. Whoever rides with a racer sees the racer's place.
+
+Cesar's story races are joined by everyone near the host at the countdown: the partner gets a car beside the host's and
+races with their own checkpoints and place. A rider finishing first makes the race the team's; the host's racer is
+marked finished first and the mission passes with that finish. No separate race prize is sent for a story race. Pool for two is played for money: the loser gives the
 stake to the winner. Two players can be at one school at once: during a lesson the other player's car is not shown
 and does not get in the way.
 
@@ -196,8 +209,8 @@ and does not get in the way.
 An activity can be turned into a contest. Within 20 seconds of its start press U, and the other players get a
 challenge (Y: yes, N: no). Whoever accepts first plays the same in their own game. While the contest is on, both
 results are shown at the top of the screen, and at the end each player learns who won. Contests work for basketball,
-pool, blackjack, roulette, the wheel of fortune, dancing in a club, the lowrider contest, the stadium events, races and
-triathlons.
+pool, blackjack, roulette, the wheel of fortune, dancing in a club, the lowrider contest, the stadium events (Kickstart
+and Blood Ring) and triathlons. Races are played together (Y), not as contests.
 
 <p align="center">
   <img src="docs/images/club.gif" width="49%" alt="A dance contest: the host and the partner dance in a club, both scores at the top">

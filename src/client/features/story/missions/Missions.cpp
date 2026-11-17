@@ -335,8 +335,9 @@ bool SideJob(const std::string& name) {
         if (!_stricmp(name.c_str(), j)) return true;
     return false;
 }
+bool IsRace(const std::string& name) { return !_stricmp(name.c_str(), "cprace"); }
 // the stadiums' events and races, in arenas of their own (areas 14 Kickstart, 15 Blood Ring, 7 8-Track, 4 Dirt Track)
-bool StadiumJob(const std::string& name) { return name == "kicksta" || name == "blood" || name == "cprace"; }
+bool StadiumJob(const std::string& name) { return !_stricmp(name.c_str(), "kicksta") || !_stricmp(name.c_str(), "blood") || IsRace(name); }
 // What the call and its notices name it: "зовёт вас на совместное задание в такси" (to), "конец совместной гонки"
 // (of). Picked when shown: the language can be switched in the connect menu.
 struct JobNames {
@@ -453,6 +454,7 @@ const char* CallerHint(const std::string& name) {
 }
 struct Side {
     std::string name;         // our own activity that may be shared, while it runs
+    void* script = nullptr;   // its thread: a new race is a new one, even with the same name
     uint64_t offerUntil = 0;  // its call can be made until then (0: made, or too late)
     bool offered = false;     // made, no answer yet
     int32_t moneyAtStart = 0;
@@ -2857,6 +2859,18 @@ void* __cdecl HookStartNewScript(uint8_t* ip) {
     if (ip == (uint8_t*)0xA7A6A0) {
         g_launcher[0] = 0;
         if (g_currentScript) memcpy(g_launcher, Field<char[8]>(g_currentScript, 0x08), 8);
+        // one race at a time: a new CPRACE started while the old race is still on (our window, or the one we joined)
+        // ends at once, so it cannot make a second race, grid or finish window (17.11)
+        const bool newRace = ip[0] == 0xA4 && ip[1] == 0x03 && ip[2] == 0x09 &&
+                             !_strnicmp(reinterpret_cast<const char*>(ip) + 3, "CPRACE", 6);
+        const bool hostRace = !Net().IsHost() && IsRace(HostMissionName());
+        if (newRace && (race::WindowActive() || race::InRace() || hostRace ||
+                        (SideJoined() && IsRace(g_side.joined)))) {
+            ip[0] = 0x4E, ip[1] = 0x00;  // TERMINATE_THIS_SCRIPT
+            ui::TheChat().AddSystem(TR("Сначала закончите текущую гонку.", "Finish the current race first."));
+            LOGI("A new race (launched by %s) not started: a race is still on", g_launcher);
+            return g_origStartScript(ip);
+        }
         // a taxi job of our own in the other's: each drives its own fares (Side::parallel), before its first command
         static const uint8_t kTaxi[] = {0xA4, 0x03, 0x09, 'T', 'A', 'X', 'I', 'O', 'D', 'D', 0};  // SCRIPT_NAME 'TAXIODD'
         bool ownTaxi = SideJoined() && !_stricmp(g_side.joined.c_str(), "taxiodd") && !memcmp(ip, kTaxi, sizeof kTaxi);
@@ -4769,6 +4783,7 @@ bool CanCall() {  // not from our own taxi job in the other's (Side::parallel)
     return !g_side.name.empty() && !SideOwning() && !SideJoined() && !g_side.offered && NowMs() < g_side.offerUntil &&
            !Net().Peers().empty();
 }
+
 // what this game showed of the activity it joined goes with it
 // The owner's stadium script takes only its own player out of the arena, which has no door: who joined goes out at that
 // script's own exit (2 m aside of it, the stadium's marker stands a few metres off and would start a run of our own)
@@ -4820,6 +4835,7 @@ void StartParallel() {
 }
 // the money our own job brought since its start, less what the other's paid us meanwhile: the other player gets it too
 void PayOther(uint8_t to) {
+    if (IsRace(g_side.name)) return;  // the race's prize is not a wage: it goes to the winner once (Race.cpp)
     if (int32_t earned = PlayerInfos()[0].money - g_side.moneyAtStart - g_side.received; earned > g_side.paid) {
         SendSide(SIDE_PAY, to, g_side.name, earned - g_side.paid);
         g_side.paid = earned;
@@ -4907,7 +4923,7 @@ void BoardSide() {
     // jobs are outdoors, but a stadium's arena
     if (!owner->ped || !owner->hasState || (owner->state.area != 0 && !stadium) || CutsceneRunning()) return;
     CVector at = owner->ped->GetPosition();
-    bool ownVehicle = job == "bcour" || job == "mtbiker" || job == "stunt" || job == "cprace" || job == "tria" || job == "pimp" ||
+    bool ownVehicle = job == "bcour" || job == "mtbiker" || job == "stunt" || IsRace(job) || job == "tria" || job == "pimp" ||
                       job == "taxiodd" || job == "ambulan" || job == "firetru" || job == "copcar" || job == "kicksta" ||
                       job == "blood" || quarry;
     // a passenger of its vehicle already: out first, a vehicle of our own beside it has no room inside its own
@@ -4957,6 +4973,7 @@ void StartOwnTaxi() {
 }
 
 void SideUpdate() {
+    if (g_side.offered && NowMs() >= g_side.offerUntil) g_side.offered = false;  // its call's window is over
     void* script = FindMissionScript();
     // Our own one its launcher started as we joined the other's ends at its first command (HookStartNewScript); taken for
     // an activity of ours meanwhile, it made us leave the joint one in the same frame (the BMX rings, 28.10)
@@ -4967,9 +4984,23 @@ void SideUpdate() {
     std::string name = script ? std::string(Field<char[8]>(script, 0x08), strnlen(Field<char[8]>(script, 0x08), 8)) : "";
     bool shareable = SideJob(name) && !(Net().IsHost() && HostOnMission());
     if (script && SideJoined() && !g_side.parallel) LeaveSide();
-    if (shareable && name != g_side.name) {  // ours started: who joins sees its marks from its start
+    if (shareable && (name != g_side.name || script != g_side.script)) {  // ours started: who joins sees its marks from its start
+        // The same activity again (a second race as the first one's mission ends): its joiners are still in it, and a
+        // call for the new one would be refused to them as busy. End the old one for them first.
+        if (SideOwning()) {
+            int32_t earned = std::max(0, PlayerInfos()[0].money - g_side.moneyAtStart - g_side.received - g_side.paid);
+            if (IsRace(g_side.name)) earned = 0;
+            Writer w(proto::G_BLIP);
+            w.U8(BLIP_CLEAR);
+            Net().Send(proto::CH_RELIABLE, w);
+            SendSide(SIDE_END, 0xFF, g_side.name, earned);
+            LOGI("Shared side activity over (%s) as the next one started: $%d for the %zu who joined", g_side.name.c_str(),
+                 earned, g_side.with.size());
+            g_side.with.clear();
+        }
         g_side.name = name;
-        g_side.offerUntil = NowMs() + 20000;
+        g_side.script = script;
+        g_side.offerUntil = NowMs() + (IsRace(name) ? 15000 : 20000);  // a race's start waits for its call
         g_side.offered = false;
         g_side.moneyAtStart = PlayerInfos()[0].money;
         g_side.paid = 0;
@@ -4979,10 +5010,12 @@ void SideUpdate() {
             if (Ref<uint8_t>(Trace(i) + 0x25) & 2) g_baseline.insert(((uint32_t)Ref<uint16_t>(Trace(i) + 0x14) << 8) | (uint32_t)i);
         ForgetSent();
         LOGI("Own side activity started (%s): the other player may be called in", name.c_str());
-    } else if (!shareable && !g_side.name.empty()) {  // ours is over
+    } else if (!shareable && !g_side.name.empty() &&
+               !(IsRace(g_side.name) && race::WindowActive())) {  // ours is over, unless its finish window is still on
         if (SideOwning()) {
             // the rest of it
             int32_t earned = std::max(0, PlayerInfos()[0].money - g_side.moneyAtStart - g_side.received - g_side.paid);
+            if (IsRace(g_side.name)) earned = 0;  // its prize is paid by Race.cpp to the race's winner, once
             Writer w(proto::G_BLIP);
             w.U8(BLIP_CLEAR);
             Net().Send(proto::CH_RELIABLE, w);
@@ -4992,6 +5025,7 @@ void SideUpdate() {
             PayOther(g_side.owner);  // the rest of our own taxi job's
         }
         g_side.name.clear();
+        g_side.script = nullptr;
         g_side.with.clear();
         g_side.offered = false;
         g_side.offerUntil = 0;
@@ -5167,10 +5201,11 @@ void HandleSide(uint8_t from, Reader& r) {
             LOGI("%s's call to %s declined: busy", who.c_str(), name.c_str());
             return;
         }
-        g_side.inviteFrom = from, g_side.inviteName = name, g_side.inviteUntil = NowMs() + 20000;
+        g_side.inviteFrom = from, g_side.inviteName = name;
+        g_side.inviteUntil = NowMs() + (IsRace(name) ? 15000 : 20000);
         LOGI("%s calls us in (%s)", who.c_str(), name.c_str());
     } else if (op == SIDE_ACCEPT) {
-        if (name != g_side.name) {  // over already
+        if (name != g_side.name || (IsRace(name) && (NowMs() >= g_side.offerUntil || race::GridPrepared()))) {  // over, or no place left
             SendSide(SIDE_END, from, name);
             return;
         }
@@ -5829,9 +5864,9 @@ bool SideCallKey(bool yes) {
         if (name == "shrange" && jobs::RangeWaits(own)) own = nullptr;
         if (yes && !own && !jobs::ValetShift()) {
             g_side.owner = from, g_side.joined = name;
-            // BoardSide; a train takes no passenger. The quarry's player gets to its dozer or dumper a while after the start,
+            // BoardSide; a train takes no passenger, and a race seats its joiner on its grid itself. The quarry's player gets to its dozer or dumper a while after the start,
             // a stadium's player to its vehicle after the intro or the marker
-            if (name != "freight")
+            if (name != "freight" && !IsRace(name))
                 g_side.boardUntil = NowMs() + (name == "quarry" ? 120000 : StadiumJob(name) ? 60000 : 15000), g_side.boardTryMs = 0;
             SendSide(SIDE_ACCEPT, from, name);
             ui::TheChat().AddSystem(Format(TR("Вы приняли приглашение %s на %s.", "You accepted %s's invitation to %s."),
@@ -5917,8 +5952,17 @@ void ShowOwnCounter(uint32_t varOffset, const char* label, bool on) {
 }
 
 bool SideLeading() { return Net().Online() && SideOwning(); }
+
+bool SideOffering() {
+    return Net().Online() && !g_side.name.empty() && g_side.owner == 0xFF && g_side.with.empty() &&
+           NowMs() < g_side.offerUntil && !Net().Peers().empty();
+}
 uint8_t SideLeader() { return Net().Online() ? g_side.owner : 0xFF; }
 std::vector<uint8_t> SideHelpers() { return Net().Online() ? g_side.with : std::vector<uint8_t>{}; }
+
+// The launcher of the running mission: the story's own for its races (cprace from cesar1, bcesar4 and the like), a side
+// thread's for the stadium's, the track's and the tournaments' races, main.scm's for the free roam ones
+bool StoryRace() { return g_launcher[0] && !SideThread(g_launcher); }
 
 void MissionWeaponUnder(int& type, int& ammo) {
     if (g_gunner.on && type == g_gunner.weapon) {  // the host's vehicle's gun in our hands: our own of that slot

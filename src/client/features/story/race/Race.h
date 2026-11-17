@@ -10,5 +10,11 @@ namespace coop::race {
 
 // owner: our race runs with the other player racing in it (its checkpoint and route marks are not sent: it has its own)
 bool ForTwo();
+// owner: the race ended, the riders still on its route race for up to three minutes
+bool WindowActive();
+// owner: the grid start is being prepared; a new rider can no longer take a place
+bool GridPrepared();
+// rider: we are on another player's grid or in its race
+bool InRace();
 
 }  // namespace coop::race
